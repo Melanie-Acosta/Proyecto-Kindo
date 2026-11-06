@@ -9,6 +9,6 @@ apellido: {
     type: DataTypes.STRING,
     allowNull: false },
 telefono: { 
-    type: DataTypes.STRING },
-    unique: true
+    type: DataTypes.STRING,
+    unique: true },
 });
