@@ -1,8 +1,8 @@
 import "dotenv/config"
 import express from "express";
-import cors from 'cors'; // Importar cors
+import cors from 'cors'; 
 import { startDB } from "./src/config/database.js";
-import { Role } from "./src/models/index.js"; // carga los modelos y las relaciones
+import { Role, User, Person } from "./src/models/index.js"; // <-- Asegúrate de importar Person aquí
 
 import { personRouter } from "./src/routes/person.route.js";
 import { userRouter } from "./src/routes/user.route.js";
@@ -33,6 +33,35 @@ app.get('/', (req, res) => {
 });
 
 
+// ==========================================
+// ENDPOINT PARA ALIMENTAR EL MAPA (Adaptado con Include)
+// ==========================================
+app.get('/api/mapa-usuarios', async (req, res) => {
+  try {
+    const usuarios = await User.findAll({
+      attributes: [
+        'id', 
+        'rol', 
+        'disponible', 
+        'especialidad', 
+        'adultoMayor', 
+        'ubicacionTexto', 
+        'lat', 
+        'lng'
+      ],
+      include: [{
+        model: Person, // Trae los datos reales de la persona asociada
+        attributes: ['nombre', 'apellido'] // Extrae nombre y apellido de la tabla 'people'
+      }]
+    });
+    res.json(usuarios);
+  } catch (error) {
+    console.error("Error al obtener usuarios para el mapa:", error);
+    res.status(500).json({ error: 'Error al cargar el mapa' });
+  }
+});
+
+
 //configuracion de las rutas 
 
 app.use("/api", personRouter);
@@ -53,12 +82,8 @@ app.listen(PORT, async () => {
   await startDB(); // conecta a la base y crea las tablas con sync()
 
   // Crea los roles una sola vez (si ya existen, no los duplica)
-await Role.findOrCreate({ where: { nombre: "familiar" } });
-await Role.findOrCreate({ where: { nombre: "asistente" } });
+  await Role.findOrCreate({ where: { nombre: "familiar" } });
+  await Role.findOrCreate({ where: { nombre: "asistente" } });
 
-console.log("El servidor listo");
+  console.log("El servidor listo");
 });
-
-
-
-
