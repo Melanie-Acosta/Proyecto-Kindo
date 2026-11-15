@@ -77,10 +77,6 @@ User.belongsToMany(Role, { through: UserRole, foreignKey: "userId", otherKey: "r
 // Un Role lo tienen MUCHOS users
 Role.belongsToMany(User, { through: UserRole, foreignKey: "roleId", otherKey: "userId" });
 
-// Una Persona tiene un Usuario, y un Usuario pertenece a una Persona
-Person.hasOne(User, { foreignKey: "personId", onUpdate: "CASCADE", onDelete: "CASCADE" });
-User.belongsTo(Person, { foreignKey: "personId" });
-
 export {
 sequelize, Person, User, Role, UserRole, UserFamiliar, UserAsistente,
 Task, Disponibilidad, Mensaje, Notificacion, Valoracion,

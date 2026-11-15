@@ -1,10 +1,20 @@
 import { body } from "express-validator";
 
 export const createTaskValidation = [
-  body("titulo").notEmpty().withMessage("Debe ingresar el título del pedido."),
-  body("familiarId").notEmpty().withMessage("Debe indicar el familiar que realiza el pedido."),
-  body("asistenteId").notEmpty().withMessage("Debe indicar el asistente que recibirá el pedido."),
-  body("fecha").optional().isISO8601().withMessage("La fecha debe tener el formato AAAA-MM-DD."),
+  body("titulo")
+    .notEmpty()
+    .withMessage("Debe ingresar el título del pedido."),
+
+  body("asistenteId")
+    .notEmpty()
+    .withMessage("Debe indicar el asistente que recibirá el pedido.")
+    .isInt()
+    .withMessage("El ID del asistente debe ser válido."),
+
+  body("fecha")
+    .optional()
+    .isISO8601()
+    .withMessage("La fecha debe tener el formato AAAA-MM-DD."),
 ];
 
 export const updateTaskValidation = [

@@ -5,10 +5,11 @@ import { sequelize } from "../config/database.js"; // <--- 1. Importa sequelize 
 
 // Registro completo (Del asistente y familiar)
 export const register = async (req, res) => {
-  // 2. Iniciamos la transacción al comenzar la petición
-  const t = await sequelize.transaction();
+ 
 
   try {
+ // 2. Iniciamos la transacción al comenzar la petición
+  const t = await sequelize.transaction();
     const { nombre, apellido, telefono, email, password, rol, nombreAdulto, edadAdulto, necesidades } = req.body;
 
     const existe = await User.findOne({ where: { email } });
@@ -29,14 +30,15 @@ export const register = async (req, res) => {
       { transaction: t }
     );
 
-    const user = await User.create(
-      {
-        email,
-        password: await hashPassword(password),
-        personId: person.id,
-      }, 
-      { transaction: t }
-    );
+ const user = await User.create(
+  {
+    email,
+    password: await hashPassword(password),
+    personId: person.id,
+    rol: rol,
+  },
+  { transaction: t }
+);
 
     // Importante: también se le pasa la transacción a las asociaciones y tablas hijas
     await user.addRole(role, { transaction: t });
@@ -59,10 +61,9 @@ export const register = async (req, res) => {
     return res.status(201).json({ message: "El usuario fue registrado correctamente." });
     
   } catch (error) {
-    // 5. Si ocurre cualquier error, revertimos todo para no dejar registros a medias
-    await t.rollback();
-    console.log(error);
-    return res.status(500).json({ message: "Intente nuevamente más tarde." });
+ if (t && !t.finished) {
+  await t.rollback();
+}
   }
 };
 

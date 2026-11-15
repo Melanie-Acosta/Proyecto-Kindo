@@ -1,27 +1,23 @@
 import { Router } from "express";
 import {
-    createNotificacion,
-    getAllNotificaciones,
-    getNotificacionById,
-    updateNotificacion,
-    deleteNotificacion,
+  getAllNotificaciones,
+  updateNotificacion
 } from "../controllers/notificacion.controller.js";
-import {validate} from "../middlewares/validate.js"
-import {createNotificacionValidation, updateNotificacionValidation} from "../middlewares/validations/notificacion.validation.js"
+
+import { authenticate } from "../middlewares/auth.middlewares.js";
 
 export const notificacionRouter = Router();
 
-// Ruta para crear una notificación
-notificacionRouter.post("/notificaciones", createNotificacion);
+// Consultar las notificaciones del usuario que inició sesión
+notificacionRouter.get(
+  "/notificaciones",
+  authenticate,
+  getAllNotificaciones
+);
 
-// Ruta para traer todas las notificaciones
-notificacionRouter.get("/notificaciones", getAllNotificaciones);
-
-// Ruta para traer una notificación por id
-notificacionRouter.get("/notificaciones/:id", getNotificacionById);
-
-// Ruta para actualizar una notificación (por ejemplo, marcarla como leída)
-notificacionRouter.put("/notificaciones/:id", updateNotificacion);
-
-// Ruta para eliminar una notificación
-notificacionRouter.delete("/notificaciones/:id", deleteNotificacion);
+// Marcar una notificación propia como leída
+notificacionRouter.put(
+  "/notificaciones/:id",
+  authenticate,
+  updateNotificacion
+);

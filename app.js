@@ -1,9 +1,19 @@
-import "dotenv/config"
-import express from "express";
-import cors from 'cors'; 
-import { startDB } from "./src/config/database.js";
-import { Role, User, Person } from "./src/models/index.js"; // <-- Asegúrate de importar Person aquí
 
+import "dotenv/config";
+import express from "express";
+import cors from "cors";
+
+import { startDB } from "./src/config/database.js";
+
+import {
+  Role,
+  User,
+  Person,
+  UserFamiliar,
+  UserAsistente
+} from "./src/models/index.js";
+
+// Rutas
 import { personRouter } from "./src/routes/person.route.js";
 import { userRouter } from "./src/routes/user.route.js";
 import { roleRouter } from "./src/routes/role.route.js";
@@ -17,52 +27,91 @@ import { notificacionRouter } from "./src/routes/notificacion.route.js";
 import { valoracionRouter } from "./src/routes/valoracion.route.js";
 import { authRouter } from "./src/routes/auth.route.js";
 
-
-const app = express ();
+const app = express();
 const PORT = 3000;
+
+// ==========================================
+// CONFIGURACIONES
+// ==========================================
 
 app.use(express.json());
 
 app.use(cors({
-    origin: 'http://localhost:5173', // La URL de tu frontend
-    credentials: true
+  origin: "http://localhost:5173",
+  credentials: true
 }));
 
-app.get('/', (req, res) => {
-    res.send('¡Conexión exitosa con el backend de Asistencia Sanitaria!');
+app.get("/", (req, res) => {
+  res.send("¡Conexión exitosa con el backend de Asistencia Sanitaria!");
 });
 
+// ==========================================
+// ENDPOINT PARA ALIMENTAR EL MAPA
+// ==========================================
 
-// ==========================================
-// ENDPOINT PARA ALIMENTAR EL MAPA (Adaptado con Include)
-// ==========================================
-app.get('/api/mapa-usuarios', async (req, res) => {
+app.get("/api/mapa-usuarios", async (req, res) => {
   try {
     const usuarios = await User.findAll({
-      attributes: [
-        'id', 
-        'rol', 
-        'disponible', 
-        'especialidad', 
-        'adultoMayor', 
-        'ubicacionTexto', 
-        'lat', 
-        'lng'
-      ],
-      include: [{
-        model: Person, // Trae los datos reales de la persona asociada
-        attributes: ['nombre', 'apellido'] // Extrae nombre y apellido de la tabla 'people'
-      }]
+      attributes: ["id"],
+      include: [
+        {
+          model: Person,
+          attributes: ["nombre", "apellido"]
+        },
+        {
+          model: UserFamiliar,
+          attributes: ["nombreAdulto", "edadAdulto", "necesidades"]
+        },
+        {
+          model: UserAsistente,
+          attributes: ["especialidad", "zona", "disponibleAhora"]
+        }
+      ]
     });
-    res.json(usuarios);
+
+    const usuariosMapa = usuarios.flatMap((usuario) => {
+
+      // Si tiene perfil de asistente
+      if (usuario.UserAsistente) {
+        return [{
+          id: usuario.id,
+          rol: "asistente",
+          nombre: usuario.Person?.nombre || "Sin nombre",
+          apellido: usuario.Person?.apellido || "",
+          especialidad: usuario.UserAsistente.especialidad,
+          zona: usuario.UserAsistente.zona,
+          disponibleAhora: usuario.UserAsistente.disponibleAhora
+        }];
+      }
+
+      // Si tiene perfil de familiar
+      if (usuario.UserFamiliar) {
+        return [{
+          id: usuario.id,
+          rol: "familiar",
+          nombreAdulto: usuario.UserFamiliar.nombreAdulto,
+          edadAdulto: usuario.UserFamiliar.edadAdulto,
+          necesidades: usuario.UserFamiliar.necesidades
+        }];
+      }
+
+      return [];
+    });
+
+    res.json(usuariosMapa);
+
   } catch (error) {
     console.error("Error al obtener usuarios para el mapa:", error);
-    res.status(500).json({ error: 'Error al cargar el mapa' });
+
+    res.status(500).json({
+      error: "Error al cargar el mapa"
+    });
   }
 });
 
-
-//configuracion de las rutas 
+// ==========================================
+// REGISTRO DE RUTAS
+// ==========================================
 
 app.use("/api", personRouter);
 app.use("/api", userRouter);
@@ -77,13 +126,36 @@ app.use("/api", notificacionRouter);
 app.use("/api", valoracionRouter);
 app.use("/api", authRouter);
 
+// ==========================================
+// INICIAR SERVIDOR
+// ==========================================
 
-app.listen(PORT, async () => {
-  await startDB(); // conecta a la base y crea las tablas con sync()
+const iniciarServidor = async () => {
+  try {
+    await startDB();
 
-  // Crea los roles una sola vez (si ya existen, no los duplica)
-  await Role.findOrCreate({ where: { nombre: "familiar" } });
-  await Role.findOrCreate({ where: { nombre: "asistente" } });
+    // Crear roles si todavía no existen
+    await Role.findOrCreate({
+      where: { nombre: "familiar" }
+    });
 
-  console.log("El servidor listo");
-});
+    await Role.findOrCreate({
+      where: { nombre: "asistente" }
+    });
+
+    app.listen(PORT, () => {
+      console.log(`El servidor está listo en el puerto ${PORT}`);
+    });
+
+  } catch (error) {
+    console.error("Error al iniciar el servidor:", error);
+    process.exit(1);
+  }
+};
+
+console.log(
+  "¿JWT_SECRET está cargado?",
+  Boolean(process.env.JWT_SECRET)
+);
+
+iniciarServidor();

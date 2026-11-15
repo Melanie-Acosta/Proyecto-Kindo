@@ -13,14 +13,14 @@ export const startDB = async () => {
     await sequelize.authenticate();
     
     // { alter: true } actualiza las tablas con las nuevas columnas sin borrar tus datos
-    await sequelize.sync({ alter: true }); 
+  await sequelize.sync();
     
     console.log("Conexion a la db esta lista y modelos sincronizados");
-  } catch (error) {
-    console.error("No se pudo conectar a la db:", error);
-  }
-};
-
+   } catch (error) {
+  console.error("No se pudo conectar a la db:", error);
+  throw error;
+}
+  };
 // conexion por pool para consultas directas
 const pool = mysql.createPool({
     host: 'localhost',
@@ -30,3 +30,4 @@ const pool = mysql.createPool({
 });
 
 export default pool;
+

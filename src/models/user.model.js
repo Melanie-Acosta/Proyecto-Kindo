@@ -13,14 +13,6 @@ export const User = sequelize.define("User", {
     type: DataTypes.STRING, 
     allowNull: false 
   },
-  personId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'people',
-      key: 'id'
-    }
-  },
   // Nuevos campos para los roles y el mapa de Kindo:
   rol: {
     type: DataTypes.ENUM('asistente', 'familiar'),

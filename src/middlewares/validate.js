@@ -7,7 +7,9 @@ if (!errors.isEmpty()) {
     return err.msg;
     });
 
-    return res.status(400).json(custom.array());
+    return res.status(400).json({
+    errors: custom.array()
+});
 }
 next();
 };

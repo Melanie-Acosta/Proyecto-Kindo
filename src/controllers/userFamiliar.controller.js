@@ -11,6 +11,7 @@ try {
     const familiar = await UserFamiliar.create({ userId, nombreAdulto, edadAdulto, necesidades });
     return res.status(201).json(familiar);
 } catch (error) {
+
     console.log(error);
     return res.status(500).json({ message: "Intente nuevamente más tarde." });
 }
