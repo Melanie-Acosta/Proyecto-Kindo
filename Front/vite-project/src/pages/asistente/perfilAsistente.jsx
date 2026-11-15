@@ -1,274 +1,533 @@
-import React, { useState } from 'react';
 
-export default function AsistentePage() {
-  const [perfil, setPerfil] = useState({
-    nombre: 'Viviana',
-    apellido: 'Gamarra',
-    email: 'vivianagamarra13@gmail.com',
-    telefono: '3704826533',
-    especialidad: 'Cuidado integral y acompañamiento de adultos mayores',
-    disponible: true,
-    tarifaHora: '5000',
-    mediosPago: 'Transferencia Bancaria, Mercado Pago, Efectivo',
-    ubicacion: 'Formosa, Argentina',
-    foto: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
-  });
+import React, { useState, useEffect } from 'react';
 
-  const [solicitudesAgenda, setSolicitudesAgenda] = useState([
-    {
-      id: 1,
-      familiar: 'Carlos Gómez',
-      adultoMayor: 'Don José Gómez',
-      lugar: 'Av. 25 de Mayo 1230, Formosa',
-      horario: 'Lunes a Viernes (08:00 - 12:00)',
-      estado: 'Confirmado',
-    },
-    {
-      id: 2,
-      familiar: 'María Fernández',
-      adultoMayor: 'Doña Carmen Rosa',
-      lugar: 'San Martín 450, Formosa',
-      horario: 'Martes y Jueves (14:00 - 18:00)',
-      estado: 'Pendiente de aceptación',
-    },
-  ]);
+const API_URL = 'http://localhost:3000/api';
+
+const FOTO_DEFAULT =
+  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=500';
+
+const perfilInicial = {
+  nombre: '',
+  apellido: '',
+  email: '',
+  telefono: '',
+  foto: FOTO_DEFAULT,
+  especialidad: '',
+  experiencia: '',
+  descripcion: '',
+  tarifaHora: '',
+  ubicacion: '',
+  disponible: false,
+};
+
+function obtenerDatosGuardados() {
+  try {
+    return JSON.parse(localStorage.getItem('usuarioKindo') || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function convertirPerfil(perfil) {
+  const persona = perfil.User?.Person || {};
+
+  return {
+    nombre: persona.nombre || '',
+    apellido: persona.apellido || '',
+    email: perfil.User?.email || '',
+    telefono: persona.telefono || '',
+    foto: perfil.foto || FOTO_DEFAULT,
+    especialidad: perfil.especialidad || '',
+    experiencia: perfil.experiencia || '',
+    descripcion: perfil.descripcion || '',
+    tarifaHora: perfil.tarifa ?? '',
+    ubicacion: perfil.zona || '',
+    disponible: Boolean(perfil.disponibleAhora),
+  };
+}
+
+export default function PerfilAsistente() {
+  const [perfil, setPerfil] = useState(perfilInicial);
+  const [perfilOriginal, setPerfilOriginal] = useState(perfilInicial);
 
   const [editando, setEditando] = useState(false);
   const [mensaje, setMensaje] = useState('');
+  const [error, setError] = useState('');
+  const [cargando, setCargando] = useState(true);
+  const [guardando, setGuardando] = useState(false);
 
-  const toggleDisponibilidad = () => {
-    setPerfil((prev) => ({ ...prev, disponible: !prev.disponible }));
-    setMensaje(perfil.disponible ? 'Estado cambiado a: No disponible' : 'Estado cambiado a: Disponible');
-    setTimeout(() => setMensaje(''), 3000);
-  };
+  const datosGuardados = obtenerDatosGuardados();
+  const token =
+    datosGuardados?.token ||
+    datosGuardados?.usuario?.token ||
+    localStorage.getItem('token');
 
+  // ==========================================
+  // CARGAR PERFIL DESDE EL BACKEND
+  // ==========================================
+  useEffect(() => {
+    const cargarPerfil = async () => {
+      if (!token) {
+        setError('No se encontró tu sesión. Por favor, iniciá sesión nuevamente.');
+        setCargando(false);
+        return;
+      }
+
+      try {
+        const respuesta = await fetch(
+          `${API_URL}/mi-perfil-asistente`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const datos = await respuesta.json();
+
+        if (!respuesta.ok) {
+          throw new Error(datos.message || 'No se pudo cargar el perfil.');
+        }
+
+        const perfilCargado = convertirPerfil(datos);
+
+        setPerfil(perfilCargado);
+        setPerfilOriginal(perfilCargado);
+      } catch (error) {
+        console.error('Error al cargar el perfil:', error);
+        setError(error.message || 'Ocurrió un error al cargar tu perfil.');
+      } finally {
+        setCargando(false);
+      }
+    };
+
+    cargarPerfil();
+  }, [token]);
+
+  // ==========================================
+  // MODIFICAR CAMPOS
+  // ==========================================
   const handleChange = (e) => {
-    setPerfil({ ...perfil, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    setPerfil((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  const handleImagenChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setPerfil((prev) => ({ ...prev, foto: imageUrl }));
+  // ==========================================
+  // GUARDAR PERFIL EN LA BASE DE DATOS
+  // ==========================================
+  const handleGuardar = async (e) => {
+    e.preventDefault();
+
+    setMensaje('');
+    setError('');
+
+    if (!token) {
+      setError('Tu sesión no es válida. Iniciá sesión nuevamente.');
+      return;
+    }
+
+    setGuardando(true);
+
+    try {
+      const datosParaEnviar = {
+        nombre: perfil.nombre,
+        apellido: perfil.apellido,
+        email: perfil.email,
+        telefono: perfil.telefono,
+        especialidad: perfil.especialidad,
+        experiencia: perfil.experiencia,
+        descripcion: perfil.descripcion,
+        tarifa: perfil.tarifaHora === '' ? null : Number(perfil.tarifaHora),
+        zona: perfil.ubicacion,
+        disponibleAhora: perfil.disponible,
+      };
+
+      // Solo enviamos la foto si es una URL guardable.
+      if (perfil.foto && !perfil.foto.startsWith('blob:')) {
+        datosParaEnviar.foto = perfil.foto;
+      }
+
+      const respuesta = await fetch(
+        `${API_URL}/mi-perfil-asistente`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(datosParaEnviar),
+        }
+      );
+
+      const datos = await respuesta.json();
+
+      if (!respuesta.ok) {
+        throw new Error(datos.message || 'No se pudieron guardar los cambios.');
+      }
+
+      const perfilActualizado = convertirPerfil(datos.perfil);
+
+      setPerfil(perfilActualizado);
+      setPerfilOriginal(perfilActualizado);
+      setEditando(false);
+      setMensaje('¡Tus datos se actualizaron correctamente!');
+
+    } catch (error) {
+      console.error('Error al guardar el perfil:', error);
+      setError(error.message || 'No se pudieron guardar los cambios.');
+    } finally {
+      setGuardando(false);
     }
   };
 
-  const handleGuardar = (e) => {
-    e.preventDefault();
+  // ==========================================
+  // CANCELAR EDICIÓN
+  // ==========================================
+  const cancelarEdicion = () => {
+    setPerfil(perfilOriginal);
     setEditando(false);
-    setMensaje('¡Perfil y tarifas actualizados con éxito!');
-    setTimeout(() => setMensaje(''), 3000);
+    setMensaje('');
+    setError('');
   };
 
+  const campoClase =
+    'w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700 outline-none transition focus:border-[#71834B] focus:ring-2 focus:ring-[#71834B]/10 disabled:bg-gray-50 disabled:text-gray-500';
+
+  // ==========================================
+  // ESTADO DE CARGA
+  // ==========================================
+  if (cargando) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F7F8F5]">
+        <p className="text-sm text-[#556B2F]">
+          Cargando tu perfil...
+        </p>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // VISTA DEL PERFIL
+  // ==========================================
   return (
-    <div className="min-h-[85vh] bg-gray-100 py-8 px-4 flex justify-center">
-      <div className="max-w-4xl w-full space-y-6">
-        
-        <div className="bg-[#556B2F] text-white p-6 rounded-xl shadow-md flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold">Panel de Control del Asistente</h1>
-            <p className="text-xs text-emerald-100 mt-1">Gestiona tu disponibilidad, agenda y datos profesionales en Kindo.</p>
-          </div>
-          <div className="hidden sm:block text-3xl">👋</div>
+    <div className="min-h-screen bg-[#F7F8F5] px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-5xl space-y-6">
+
+        {/* Encabezado */}
+        <div className="mb-2">
+          <p className="text-sm font-medium uppercase tracking-wider text-[#71834B]">
+            Mi espacio profesional
+          </p>
+
+          <h1 className="mt-2 text-2xl font-semibold text-gray-800 sm:text-3xl">
+            Mi perfil
+          </h1>
+
+          <p className="mt-2 text-sm text-gray-500">
+            Presentate ante las familias y compartí tu experiencia profesional.
+          </p>
         </div>
 
+        {/* Mensajes */}
         {mensaje && (
-          <div className="p-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg text-center font-medium shadow-sm">
+          <div className="rounded-xl border border-[#DCE5CE] bg-[#F1F5EA] px-5 py-3 text-sm text-[#556B2F]">
             {mensaje}
           </div>
         )}
 
-        <div className="bg-white rounded-xl shadow-md p-6 flex flex-col md:flex-row gap-6 items-center md:items-start">
-          <div className="flex flex-col items-center gap-3">
-            <div className="relative w-32 h-32 rounded-full overflow-hidden border-4 border-[#556B2F] shadow-inner">
-              <img src={perfil.foto} alt="Foto de perfil" className="w-full h-full object-cover" />
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {/* Tarjeta principal */}
+        <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-sm">
+
+          {/* Franja verde */}
+          <div className="relative h-32 bg-[#556B2F] sm:h-40">
+            <div className="flex h-full items-start justify-end p-5">
+              <span className="rounded-full border border-white/30 bg-white/15 px-4 py-2 text-xs font-medium text-white">
+                Kindo · Perfil profesional
+              </span>
             </div>
-
-            {editando && (
-              <label className="cursor-pointer text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1.5 rounded-md font-semibold transition">
-                Cambiar foto
-                <input type="file" accept="image/*" onChange={handleImagenChange} className="hidden" />
-              </label>
-            )}
-
-            <button
-              onClick={toggleDisponibilidad}
-              type="button"
-              className={`w-full py-2 px-4 rounded-lg text-xs font-bold transition shadow-sm ${
-                perfil.disponible
-                  ? 'bg-green-100 text-green-800 border border-green-300 hover:bg-green-200'
-                  : 'bg-red-100 text-red-800 border border-red-300 hover:bg-red-200'
-              }`}
-            >
-              {perfil.disponible ? '● Disponible para trabajar' : '○ No disponible'}
-            </button>
           </div>
 
-          <div className="flex-1 w-full">
-            <div className="flex justify-between items-center border-b pb-3 mb-4">
-              <h2 className="text-xl font-bold text-gray-800">Mi Perfil y Tarifas</h2>
-              <button
-                type="button"
-                onClick={() => setEditando(!editando)}
-                className="text-sm px-4 py-1.5 bg-[#556B2F] text-white rounded-lg hover:bg-[#445624] font-medium transition"
-              >
-                {editando ? 'Cancelar' : 'Editar Datos'}
-              </button>
+          {/* Foto y nombre */}
+          <div className="px-5 pb-7 sm:px-8">
+            <div className="relative -mt-[74px] flex flex-col gap-4 sm:-mt-[82px] sm:flex-row sm:items-center">
+
+              <div className="relative z-10 h-28 w-28 shrink-0 overflow-hidden rounded-full border-4 border-white bg-gray-100 shadow-md sm:h-36 sm:w-36">
+                <img
+                  src={perfil.foto}
+                  alt="Foto de perfil"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+
+              <div className="relative z-0 flex min-h-[76px] flex-1 flex-col justify-center rounded-3xl border border-[#DCE5CE] bg-white px-6 py-4 shadow-sm sm:-ml-3 sm:mt-2 sm:rounded-full sm:pl-8">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-xl font-semibold text-gray-800 sm:text-2xl">
+                    {perfil.nombre} {perfil.apellido}
+                  </h2>
+
+                  <span className="rounded-full bg-[#F1F5EA] px-3 py-1 text-xs font-medium text-[#556B2F]">
+                    Asistente
+                  </span>
+                </div>
+
+                <p className="mt-1 text-sm text-gray-500">
+                  {perfil.especialidad}
+                </p>
+
+                <p className="mt-1 text-xs text-gray-400">
+                  {perfil.ubicacion}
+                </p>
+              </div>
+
+              <div className="relative z-10 sm:ml-2">
+                {!editando && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMensaje('');
+                      setError('');
+                      setEditando(true);
+                    }}
+                    className="rounded-full bg-[#556B2F] px-5 py-3 text-sm font-medium text-white transition hover:bg-[#435526]"
+                  >
+                    Editar perfil
+                  </button>
+                )}
+              </div>
             </div>
+          </div>
+        </div>
 
-            <form onSubmit={handleGuardar} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Nombre</label>
-                  <input
-                    type="text"
-                    name="nombre"
-                    value={perfil.nombre}
-                    onChange={handleChange}
-                    disabled={!editando}
-                    className="w-full p-2 border rounded-lg bg-gray-50 disabled:bg-gray-100 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Apellido</label>
-                  <input
-                    type="text"
-                    name="apellido"
-                    value={perfil.apellido}
-                    onChange={handleChange}
-                    disabled={!editando}
-                    className="w-full p-2 border rounded-lg bg-gray-50 disabled:bg-gray-100 text-sm"
-                  />
-                </div>
-              </div>
+        {/* Formulario */}
+        <form onSubmit={handleGuardar} className="space-y-6">
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Correo Electrónico</label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={perfil.email}
-                    onChange={handleChange}
-                    disabled={!editando}
-                    className="w-full p-2 border rounded-lg bg-gray-50 disabled:bg-gray-100 text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Teléfono</label>
-                  <input
-                    type="text"
-                    name="telefono"
-                    value={perfil.telefono}
-                    onChange={handleChange}
-                    disabled={!editando}
-                    className="w-full p-2 border rounded-lg bg-gray-50 disabled:bg-gray-100 text-sm"
-                  />
-                </div>
-              </div>
+          {/* Datos personales */}
+          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
+            <h3 className="text-lg font-semibold text-gray-800">
+              Información personal
+            </h3>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Tarifa por Hora ($)</label>
-                  <input
-                    type="text"
-                    name="tarifaHora"
-                    value={perfil.tarifaHora}
-                    onChange={handleChange}
-                    disabled={!editando}
-                    className="w-full p-2 border rounded-lg bg-gray-50 disabled:bg-gray-100 text-sm font-semibold text-[#556B2F]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Medios de Pago</label>
-                  <input
-                    type="text"
-                    name="mediosPago"
-                    value={perfil.mediosPago}
-                    onChange={handleChange}
-                    disabled={!editando}
-                    className="w-full p-2 border rounded-lg bg-gray-50 disabled:bg-gray-100 text-sm"
-                  />
-                </div>
+            <p className="mt-1 text-sm text-gray-500">
+              Tus datos de contacto y presentación.
+            </p>
+
+            <div className="mt-6 grid gap-5 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-600">
+                  Nombre
+                </label>
+                <input
+                  name="nombre"
+                  value={perfil.nombre}
+                  onChange={handleChange}
+                  disabled={!editando}
+                  required
+                  className={campoClase}
+                />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Ubicación Actual (Ciudad / Zona)</label>
+                <label className="mb-2 block text-sm font-medium text-gray-600">
+                  Apellido
+                </label>
                 <input
-                  type="text"
+                  name="apellido"
+                  value={perfil.apellido}
+                  onChange={handleChange}
+                  disabled={!editando}
+                  required
+                  className={campoClase}
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-600">
+                  Correo electrónico
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={perfil.email}
+                  onChange={handleChange}
+                  disabled={!editando}
+                  required
+                  className={campoClase}
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-600">
+                  Teléfono
+                </label>
+                <input
+                  name="telefono"
+                  value={perfil.telefono}
+                  onChange={handleChange}
+                  disabled={!editando}
+                  className={campoClase}
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-600">
+                  Ubicación
+                </label>
+                <input
                   name="ubicacion"
                   value={perfil.ubicacion}
                   onChange={handleChange}
                   disabled={!editando}
-                  className="w-full p-2 border rounded-lg bg-gray-50 disabled:bg-gray-100 text-sm"
+                  className={campoClase}
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Especialidad y Experiencia</label>
-                <textarea
+                <label className="mb-2 block text-sm font-medium text-gray-600">
+                  Foto de perfil
+                </label>
+                <input
+                  value="La carga de imágenes estará disponible próximamente"
+                  disabled
+                  className={campoClase}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Información profesional */}
+          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
+            <h3 className="text-lg font-semibold text-gray-800">
+              Perfil profesional
+            </h3>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Contales a las familias qué servicios ofrecés.
+            </p>
+
+            <div className="mt-6 space-y-5">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-600">
+                  Especialidad
+                </label>
+                <input
                   name="especialidad"
-                  rows="2"
                   value={perfil.especialidad}
                   onChange={handleChange}
                   disabled={!editando}
-                  className="w-full p-2 border rounded-lg bg-gray-50 disabled:bg-gray-100 text-sm"
+                  className={campoClase}
                 />
               </div>
 
-              {editando && (
-                <div className="flex justify-end pt-2">
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-[#556B2F] text-white rounded-lg text-sm font-semibold hover:bg-[#445624] transition shadow"
-                  >
-                    Guardar Cambios
-                  </button>
-                </div>
-              )}
-            </form>
-          </div>
-        </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-600">
+                  Experiencia
+                </label>
+                <input
+                  name="experiencia"
+                  value={perfil.experiencia}
+                  onChange={handleChange}
+                  disabled={!editando}
+                  placeholder="Ej. 5 años de experiencia"
+                  className={campoClase}
+                />
+              </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6 space-y-4">
-          <h2 className="text-lg font-bold text-gray-800 border-b pb-2">Agenda y Solicitudes de Familiares</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {solicitudesAgenda.map((item) => (
-              <div key={item.id} className="border rounded-lg p-4 bg-gray-50 space-y-2 shadow-sm">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold px-2.5 py-1 bg-blue-100 text-blue-800 rounded-full">
-                    {item.estado}
-                  </span>
-                  <span className="text-xs text-gray-500 font-medium">{item.horario}</span>
-                </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-600">
+                  Descripción
+                </label>
+                <textarea
+                  name="descripcion"
+                  value={perfil.descripcion}
+                  onChange={handleChange}
+                  disabled={!editando}
+                  rows={4}
+                  className={campoClase}
+                />
+              </div>
+
+              <div className="grid gap-5 sm:grid-cols-2">
                 <div>
-                  <p className="text-sm font-bold text-gray-800">Familiar: {item.familiar}</p>
-                  <p className="text-xs text-gray-600">Paciente / Adulto Mayor: <span className="font-medium">{item.adultoMayor}</span></p>
-                </div>
-                <div className="text-xs text-gray-700 bg-white p-2 rounded border">
-                  📍 <span className="font-semibold">Lugar de servicio:</span> {item.lugar}
+                  <label className="mb-2 block text-sm font-medium text-gray-600">
+                    Tarifa por hora ($)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    name="tarifaHora"
+                    value={perfil.tarifaHora}
+                    onChange={handleChange}
+                    disabled={!editando}
+                    className={campoClase}
+                  />
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-md p-6 space-y-3">
-          <h2 className="text-lg font-bold text-gray-800">Mapa de Ubicación y Zona de Cobertura</h2>
-          <p className="text-xs text-gray-500">Referencia geográfica actual del asistente para los familiares en la plataforma.</p>
-          
-          <div className="w-full h-64 bg-gray-200 rounded-lg overflow-hidden border relative flex items-center justify-center">
-            <div className="absolute inset-0 bg-emerald-50 opacity-50 flex items-center justify-center">
-              <span className="text-gray-400 font-semibold tracking-wider">[ Mapa Interactivo - {perfil.ubicacion} ]</span>
-            </div>
-            <div className="z-10 bg-[#556B2F] text-white px-4 py-2 rounded-full shadow-lg text-xs font-bold flex items-center gap-2 animate-bounce">
-              📍 Estás aquí ({perfil.ubicacion})
             </div>
           </div>
-        </div>
 
+          {/* Disponibilidad */}
+          <div className="rounded-3xl border border-gray-100 bg-white p-6 shadow-sm sm:p-8">
+            <h3 className="text-lg font-semibold text-gray-800">
+              Disponibilidad
+            </h3>
+
+            <p className="mt-1 text-sm text-gray-500">
+              Indicá si actualmente estás disponible para nuevas solicitudes.
+            </p>
+
+            <label className="mt-5 flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={perfil.disponible}
+                onChange={(e) =>
+                  setPerfil((prev) => ({
+                    ...prev,
+                    disponible: e.target.checked,
+                  }))
+                }
+                disabled={!editando}
+                className="h-5 w-5 accent-[#556B2F]"
+              />
+
+              <span className="text-sm font-medium text-gray-700">
+                Estoy disponible para trabajar
+              </span>
+            </label>
+          </div>
+
+          {/* Botones */}
+          {editando && (
+            <div className="flex flex-wrap justify-end gap-3 pb-6">
+              <button
+                type="button"
+                onClick={cancelarEdicion}
+                disabled={guardando}
+                className="rounded-full border border-gray-200 bg-white px-6 py-3 text-sm font-medium text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="submit"
+                disabled={guardando}
+                className="rounded-full bg-[#556B2F] px-7 py-3 text-sm font-medium text-white transition hover:bg-[#435526] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {guardando ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          )}
+        </form>
       </div>
     </div>
   );

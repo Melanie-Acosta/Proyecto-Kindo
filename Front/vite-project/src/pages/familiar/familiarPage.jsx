@@ -6,6 +6,7 @@ function PerfilFamiliar() {
   const [cargando, setCargando] = useState(true);
   const navigate = useNavigate();
 
+
   // Cargar solo los asistentes disponibles desde el backend
   useEffect(() => {
     fetch('http://localhost:3000/api/mapa-usuarios') // O puedes crear un endpoint específico o filtrar en el front

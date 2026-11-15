@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export default function Auth() {
   const navigate = useNavigate();
@@ -14,51 +14,78 @@ export default function Auth() {
   const [mensaje, setMensaje] = useState('');
   const [esExito, setEsExito] = useState(false);
 
-  const handleSubmit = async (e) => {
+
+const handleSubmit = async (e) => {
     e.preventDefault();
-    setMensaje('');
-    
+
+    setMensaje('Registrando usuario...');
+    setEsExito(false);
+
+    console.log('Iniciando registro...');
+
     try {
-      const response = await fetch('http://localhost:3000/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombre,
-          apellido,
-          telefono,
-          email,
-          password,
-          rol,
-          adultoMayor: rol === 'familiar' ? adultoMayor : undefined
-        }),
-      });
-      // En tu auth.jsx al registrar o iniciar sesión con éxito:
-localStorage.setItem('usuarioKindo', JSON.stringify(data.usuario));
+        const response = await fetch(
+            'http://localhost:3000/api/auth/register',
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    nombre,
+                    apellido,
+                    telefono,
+                    email,
+                    password,
+                    rol,
+                    nombreAdulto: rol === 'familiar'
+                        ? nombreAdulto
+                        : undefined
+                })
+            }
+        );
 
-      const data = await response.json();
-      
-      if (response.ok) {
+        const data = await response.json();
+
+        console.log('Respuesta del backend:', data);
+
+        if (!response.ok) {
+    setMensaje(
+        data.errors?.[0] ||
+        data.message ||
+        'Error al registrar usuario'
+    );
+    return;
+}
+
         setEsExito(true);
-        setMensaje('¡Registro exitoso! Redirigiendo...');
+        setMensaje('¡Registro exitoso!');
+        // Redirigir a la pantalla principal
+navigate('/');
 
-        // Redirección condicionada según el rol seleccionado
-setTimeout(() => {
-  if (rol === 'familiar') {
-    navigate('/');
-  } else if (rol === 'asistente') {
-    navigate('/dashboard-asistente');
-  }
-}, 1000);
+        // No guardamos usuario todavía porque
+        // el controlador de registro no devuelve token ni usuario.
 
-      } else {
-        setEsExito(false);
-        setMensaje(data.message || 'Ocurrió un error');
-      }
     } catch (error) {
-      setEsExito(false);
-      setMensaje('No se pudo conectar con el servidor');
+        console.error('Error durante el registro:', error);
+
+        setEsExito(false);
+        setMensaje('No se pudo conectar con el servidor');
     }
-  };
+};
+<div className="mt-4 text-center">
+  <p className="text-sm text-gray-600">
+    ¿Ya tenés una cuenta?
+  </p>
+
+  <Link
+    to="/login"
+    className="text-[#556B2F] font-semibold hover:underline"
+  >
+    Iniciar sesión
+  </Link>
+</div>
+
 
   return (
     <div className="min-h-[85vh] bg-gray-100 flex items-center justify-center py-8">
@@ -153,6 +180,18 @@ setTimeout(() => {
             {mensaje}
           </p>
         )}
+        <div className="mt-4 text-center">
+    <p className="text-sm text-gray-600">
+        ¿Ya tenés una cuenta?
+    </p>
+
+    <Link
+        to="/login"
+        className="text-[#556B2F] font-semibold hover:underline"
+    >
+        Iniciar sesión
+    </Link>
+</div>
       </form>
     </div>
   );
